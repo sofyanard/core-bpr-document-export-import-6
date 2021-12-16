@@ -3,6 +3,13 @@ using CoreBPRDocumentExportImport6.Models;
 
 var builder = WebApplication.CreateBuilder(args);
 
+IConfiguration configuration = new ConfigurationBuilder()
+                            .AddJsonFile("appsettings.json")
+                            .Build();
+int hostPort = int.Parse(configuration["HostPort"]);
+// builder.WebHost.UseUrls("https://localhost:44377");
+builder.WebHost.ConfigureKestrel(options => options.ListenLocalhost(hostPort));
+
 // Add services to the container.
 
 builder.Services.AddControllers();
