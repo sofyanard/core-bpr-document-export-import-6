@@ -22,7 +22,7 @@ namespace CoreBPRDocumentExportImport6.Controllers
             Configuration = configuration;
         }
 
-        [HttpGet("{template}/{id}")]
+        [HttpGet("export/{template}/{id}")]
         public async Task<ActionResult<string>> GetExport(string template, string id)
         {
             try
