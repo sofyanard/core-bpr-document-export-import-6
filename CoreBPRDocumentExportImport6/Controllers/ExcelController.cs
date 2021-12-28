@@ -148,12 +148,20 @@ namespace CoreBPRDocumentExportImport6.Controllers
                     templateFileStream.Close();
                     result.Close();
 
-                    return createdFile;
+                    return createdFileName;
                 }
             }
             catch (Exception e)
             {
-                return e.Message;
+                if (e.Message.Contains(templateFile))
+                {
+                    throw new Exception(e.Message.Replace(templateFile, templateFileName));
+                }
+                if (e.Message.Contains(createdFile))
+                {
+                    throw new Exception(e.Message.Replace(createdFile, createdFileName));
+                }
+                throw new Exception(e.Message);
             }
         }
     }
