@@ -14,16 +14,20 @@ namespace CoreBPRDocumentExportImport6.Controllers
     {
         private readonly ApplicationDbContext _context;
         private IConfiguration Configuration { get; }
+        private readonly ILogger<ExcelController> _logger;
 
-        public ExcelController(ApplicationDbContext context, IConfiguration configuration)
+        public ExcelController(ApplicationDbContext context, IConfiguration configuration, ILogger<ExcelController> logger)
         {
             _context = context;
             Configuration = configuration;
+            _logger = logger;
         }
 
         [HttpGet("lapkeu/{template}")]
         public async Task<ActionResult<string>> GetLapkeu(string template)
         {
+            _logger.LogInformation("GetLapkeu started at: {time}", DateTimeOffset.UtcNow);
+
             try
             {
                 string filePath = await GenerateLaporanKeuangan(template);
@@ -38,6 +42,8 @@ namespace CoreBPRDocumentExportImport6.Controllers
         // Generate Laporan Keuangan
         private async Task<string> GenerateLaporanKeuangan(string template)
         {
+            _logger.LogInformation("GenerateLaporanKeuangan started at: {time}", DateTimeOffset.UtcNow);
+
             string templateFolder = Configuration["Folder:TemplateFolder"];
             string uploadFolder = Configuration["Folder:UploadFolder"];
             string templateFileName = _context.DcxTemplateMasters.Where(x => x.TemplateId == template).Select(x => x.TemplateFilename).FirstOrDefault();
@@ -48,6 +54,16 @@ namespace CoreBPRDocumentExportImport6.Controllers
             string strToday = today.ToString("yyyy-MM-dd");
             string createdFileName = fileNameWithoutExtension + "-" + strToday + fileExtension;
             string createdFile = Path.Combine(uploadFolder, createdFileName);
+
+            _logger.LogInformation("templateFolder: {0}", templateFolder);
+            _logger.LogInformation("uploadFolder: {0}", uploadFolder);
+            _logger.LogInformation("templateFileName: {0}", templateFileName);
+            _logger.LogInformation("templateFile: {0}", templateFile);
+            _logger.LogInformation("fileNameWithoutExtension: {0}", fileNameWithoutExtension);
+            _logger.LogInformation("fileExtension: {0}", fileExtension);
+            _logger.LogInformation("strToday: {0}", strToday);
+            _logger.LogInformation("createdFileName: {0}", createdFileName);
+            _logger.LogInformation("createdFile: {0}", createdFile);
 
             try
             {
@@ -64,6 +80,10 @@ namespace CoreBPRDocumentExportImport6.Controllers
                     }
                     createdFileName = newFileName;
                     createdFile = newFilePath;
+
+                    _logger.LogInformation("File Exists");
+                    _logger.LogInformation("createdFileName: {0}", createdFileName);
+                    _logger.LogInformation("createdFile: {0}", createdFile);
                 }
 
                 List<DcxTemplateMaster> listDcxTemplateMaster;
@@ -120,12 +140,16 @@ namespace CoreBPRDocumentExportImport6.Controllers
 
                         sqlQuery = sqlSelect + sqlFrom + sqlWhere;
 
+                        _logger.LogInformation("sqlQuery: {0}", sqlQuery);
+
                         // Dapper Connection
                         using (var dconn = new NpgsqlConnection(Configuration.GetConnectionString("DefaultConnection")))
                         {
                             var queryResult = dconn.Query(sqlQuery).ToList();
 
                             var jsonResult = JsonConvert.SerializeObject(queryResult);
+
+                            _logger.LogInformation("jsonResult: {0}", jsonResult);
 
                             tableResult = (DataTable)JsonConvert.DeserializeObject(jsonResult, typeof(DataTable));
 
@@ -153,6 +177,8 @@ namespace CoreBPRDocumentExportImport6.Controllers
             }
             catch (Exception e)
             {
+                _logger.LogError("catch: {0}", e.Message);
+
                 if (e.Message.Contains(templateFile))
                 {
                     throw new Exception(e.Message.Replace(templateFile, templateFileName));
