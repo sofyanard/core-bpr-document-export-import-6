@@ -36,6 +36,24 @@ namespace CoreBPRDocumentExportImport6.Controllers
             catch (Exception e)
             {
                 return BadRequest(e.Message);
+                _logger.LogError("GetLapkeu error: {0}", e.Message);
+            }
+        }
+
+        [HttpGet("lapslik/{template}")]
+        public async Task<ActionResult<string>> GetLapslik(string template)
+        {
+            _logger.LogInformation("GetLapslik started at: {time}", DateTimeOffset.UtcNow);
+
+            try
+            {
+                string filePath = await GenerateLaporanSlik(template);
+                return Ok(filePath);
+            }
+            catch (Exception e)
+            {
+                return BadRequest(e.Message);
+                _logger.LogError("GetLapkeu error: {0}", e.Message);
             }
         }
 
@@ -159,6 +177,179 @@ namespace CoreBPRDocumentExportImport6.Controllers
                                 saldo = tableResult.Rows[i][1].ToString();
 
                                 worksheet.Range[pos].Text = saldo;
+                            }
+                        }
+                    }
+
+                    //Saving the workbook to disk in XLSX format
+                    FileStream result = new FileStream(createdFile, FileMode.Create, FileAccess.Write);
+                    workbook.SaveAs(result);
+
+                    // Clean Process
+                    workbook.Close();
+                    templateFileStream.Close();
+                    result.Close();
+
+                    return createdFileName;
+                }
+            }
+            catch (Exception e)
+            {
+                _logger.LogError("catch: {0}", e.Message);
+
+                if (e.Message.Contains(templateFile))
+                {
+                    throw new Exception(e.Message.Replace(templateFile, templateFileName));
+                }
+                if (e.Message.Contains(createdFile))
+                {
+                    throw new Exception(e.Message.Replace(createdFile, createdFileName));
+                }
+                throw new Exception(e.Message);
+            }
+        }
+
+        private async Task<string> GenerateLaporanSlik(string template)
+        {
+            _logger.LogInformation("GenerateLaporanStarted started at: {time}", DateTimeOffset.UtcNow);
+
+            string templateFolder = Configuration["Folder:TemplateFolder"];
+            _logger.LogInformation("templateFolder: {0}", templateFolder);
+
+            string uploadFolder = Configuration["Folder:UploadFolder"];
+            _logger.LogInformation("uploadFolder: {0}", uploadFolder);
+
+            string templateFileName = _context.DcxTemplateMasters.Where(x => x.TemplateId == template).Select(x => x.TemplateFilename).FirstOrDefault();
+            _logger.LogInformation("templateFileName: {0}", templateFileName);
+
+            string templateFile = Path.Combine(templateFolder, templateFileName);
+            _logger.LogInformation("templateFile: {0}", templateFile);
+
+            string fileNameWithoutExtension = Path.GetFileNameWithoutExtension(templateFile);
+            _logger.LogInformation("fileNameWithoutExtension: {0}", fileNameWithoutExtension);
+
+            string fileExtension = Path.GetExtension(templateFile);
+            _logger.LogInformation("fileExtension: {0}", fileExtension);
+
+            DateTime today = DateTime.Now;
+            string strToday = today.ToString("yyyy-MM-dd");
+            _logger.LogInformation("strToday: {0}", strToday);
+
+            string createdFileName = fileNameWithoutExtension + "-" + strToday + fileExtension;
+            _logger.LogInformation("createdFileName: {0}", createdFileName);
+
+            string createdFile = Path.Combine(uploadFolder, createdFileName);
+            _logger.LogInformation("createdFile: {0}", createdFile);
+
+            try
+            {
+                if (System.IO.File.Exists(createdFile))
+                {
+                    int i = 1;
+                    string newFileName = fileNameWithoutExtension + "-" + strToday + "(" + i.ToString() + ")" + fileExtension;
+                    string newFilePath = Path.Combine(uploadFolder, newFileName);
+                    while (System.IO.File.Exists(newFilePath))
+                    {
+                        i++;
+                        newFileName = fileNameWithoutExtension + "-" + strToday + "(" + i.ToString() + ")" + fileExtension;
+                        newFilePath = Path.Combine(uploadFolder, newFileName);
+                    }
+                    createdFileName = newFileName;
+                    createdFile = newFilePath;
+
+                    _logger.LogInformation("File Exists");
+                    _logger.LogInformation("createdFileName: {0}", createdFileName);
+                    _logger.LogInformation("createdFile: {0}", createdFile);
+                }
+
+                List<DcxTemplateMaster> listDcxTemplateMaster;
+                List<DcxTemplateDetail> listDcxTemplateDetail;
+                string sheetId, sqlSelect, sqlFrom, sqlWhere, sqlQuery, iCellCol;
+                int sequenceId, iCellRow;
+                DataTable tableResult;
+
+                using (ExcelEngine excelEngine = new ExcelEngine())
+                {
+                    IApplication application = excelEngine.Excel;
+
+                    FileStream templateFileStream = new FileStream(templateFile, FileMode.OpenOrCreate, FileAccess.Read);
+
+                    //Loads or open an existing workbook through Open method of IWorkbooks
+                    IWorkbook workbook = excelEngine.Excel.Workbooks.Open(templateFileStream);
+
+                    // Loop for DcxTemplateMaster
+                    listDcxTemplateMaster = _context.DcxTemplateMasters.Where(x => x.TemplateId == template).OrderBy(x => x.Id).ToList();
+
+                    foreach (DcxTemplateMaster dcxTemplateMaster in listDcxTemplateMaster)
+                    {
+                        sheetId = dcxTemplateMaster.SheetId;
+                        sequenceId = dcxTemplateMaster.SequenceId;
+                        _logger.LogInformation("sheetId: {0} - sequenceId: {1}", sheetId, sequenceId);
+
+                        //Access a worksheet from workbook
+                        IWorksheet worksheet = workbook.Worksheets[sheetId];
+
+                        // Loop for DcxTemplateDetail
+                        listDcxTemplateDetail = _context.DcxTemplateDetails.Where(x => x.TemplateId == template && x.SheetId == sheetId && x.SequenceId == sequenceId).OrderBy(x => x.Id).ToList();
+
+                        sqlSelect = "";
+                        sqlFrom = "";
+                        sqlWhere = "";
+                        sqlQuery = "";
+                        iCellRow = 0;
+                        iCellCol = "";
+
+                        foreach (DcxTemplateDetail dcxTemplateDetail in listDcxTemplateDetail)
+                        {
+                            if ((dcxTemplateDetail.SqlSelect != null) && (dcxTemplateDetail.SqlSelect.Trim() != String.Empty))
+                            {
+                                sqlSelect = sqlSelect + dcxTemplateDetail.SqlSelect;
+                            }
+
+                            if ((dcxTemplateDetail.SqlFrom != null) && (dcxTemplateDetail.SqlFrom.Trim() != String.Empty))
+                            {
+                                sqlFrom = sqlFrom + dcxTemplateDetail.SqlFrom;
+                            }
+
+                            if ((dcxTemplateDetail.SqlWhere != null) && (dcxTemplateDetail.SqlWhere.Trim() != String.Empty))
+                            {
+                                sqlWhere = sqlWhere + dcxTemplateDetail.SqlWhere;
+                            }
+                        }
+
+                        sqlQuery = sqlSelect + sqlFrom + sqlWhere;
+                        _logger.LogInformation("sqlQuery: {0}", sqlQuery);
+
+                        try
+                        {
+                            iCellRow = int.Parse(listDcxTemplateDetail[0].CellRow);
+                            _logger.LogInformation("iCellRow: {0}", iCellRow.ToString());
+                        }
+                        catch { }
+                        
+                        // Dapper Connection
+                        using (var dconn = new NpgsqlConnection(Configuration.GetConnectionString("DefaultConnection")))
+                        {
+                            var queryResult = dconn.Query(sqlQuery).ToList();
+
+                            var jsonResult = JsonConvert.SerializeObject(queryResult);
+                            // _logger.LogInformation("jsonResult: {0}", jsonResult);
+
+                            tableResult = (DataTable)JsonConvert.DeserializeObject(jsonResult, typeof(DataTable));
+
+                            for (int i = 0; i < tableResult.Rows.Count; i++)
+                            {
+                                for (int j = 0; j < listDcxTemplateDetail.Count; j++)
+                                {
+                                    iCellCol = listDcxTemplateDetail[j].CellColumn;
+                                    string cellIndex = iCellCol + iCellRow.ToString();
+                                    string cellData = tableResult.Rows[i][j].ToString();
+                                    worksheet.Range[cellIndex].Text = cellData;
+                                    _logger.LogInformation("cellIndex: {0} - cellData: {1}", cellIndex, cellData);
+                                }
+
+                                iCellRow++;
+                                _logger.LogInformation("iCellRow: {0}", iCellRow.ToString());
                             }
                         }
                     }
