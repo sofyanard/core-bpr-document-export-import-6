@@ -1,3 +1,5 @@
+using System;
+
 namespace CoreBPRDocumentExportImport6
 {
     public class WeatherForecast
